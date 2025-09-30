@@ -1,6 +1,6 @@
 # Terraform AWS Learning
 
-Projet d'apprentissage Terraform pour la préparation à la certification **AWS Solutions Architect Associate**.
+Premier projet d'apprentissage Terraform pour la préparation à la certification **AWS Solutions Architect Associate**.
 
 Infrastructure AWS complète créée avec Infrastructure as Code (IaC).
 
@@ -28,18 +28,21 @@ Cette infrastructure déploie une architecture web 3-tiers complète :
 
 ### 💻 Couche Application
 - **Instance EC2** : 
-  - **Type** : t2.micro (éligible au Free Tier AWS)
+  - **Type** : t2.micro 
   - **OS** : Ubuntu Server
   - **Serveur web Nginx** : Installé et configuré **automatiquement** via un script user_data
   - **IP publique** : Automatiquement assignée pour l'accès web
 
 ---
+Quand j’ai commencé ce projet, je ne savais même pas ce que signifiaient "user data" ou "Nginx". Ces termes me semblaient techniques, abstraits, presque réservés aux experts. Mais en réalité, leur configuration est bien plus simple qu’il n’y paraît.
 
-## 🤖 L'Automatisation en Action
+Ci-dessous, vous trouverez une explication de ce système
+
+## 🤖 
 
 ### Qu'est-ce que user_data ?
 
-**user_data** est un script qui s'exécute automatiquement au premier démarrage de l'instance EC2. C'est comme donner une "liste de tâches" à votre serveur.
+**user_data** est un script qui s'exécute automatiquement au premier démarrage de l'instance EC2. C'est comme donner une "liste de tâches" donner à votre serveur.
 
 **Dans ce projet, le script user_data :**
 1. Met à jour les packages système
@@ -53,19 +56,11 @@ Cette infrastructure déploie une architecture web 3-tiers complète :
 
 **Nginx** est un serveur web populaire qui transforme votre serveur EC2 en site web accessible.
 
-**Analogie simple :** 
-- Sans Nginx : votre EC2 est comme un restaurant fermé
-- Avec Nginx : votre EC2 devient un restaurant ouvert qui sert des pages web aux visiteurs
+Une des raisons pour lesquelles j’ai choisi Nginx, c’est que je n’avais pas envie de me trop compliqué la création de mon infra, avec la récupération des clés SSH de l’instance EC2, ni de devoir uploader un site statique dans un bucket S3, configurer les permissions, le hosting, etc.
 
-Dans ce projet, Nginx sert de **démonstration concrète** que votre infrastructure fonctionne - vous pouvez voir la page web dans votre navigateur !
+Avec Nginx, j’ai pu déployer mon site directement sur l’instance EC2 via Terraform, en utilisant les user data. Pas besoin de me connecter manuellement à l’instance, ni de gérer des clés : tout se fait automatiquement au démarrage.
 
----
+C’est simple, rapide...
 
-## 🌐 Démonstration
 
-Une fois l'infrastructure déployée, testez votre serveur web :
-
-### 1. Récupérez l'IP publique
-```bash
-terraform output ip_publique_serveur
 
