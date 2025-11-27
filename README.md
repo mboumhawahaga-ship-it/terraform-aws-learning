@@ -17,7 +17,9 @@ Cette infrastructure déploie une architecture web 3-tiers complète :
 - **Subnets** :
   - **Subnet Public** (10.0.1.0/24) dans eu-west-3a - pour les ressources accessibles depuis Internet
   - **Subnet Privé** (10.0.2.0/24) dans eu-west-3b - pour les ressources internes (bases de données, etc.)
+
 - **Internet Gateway** : Porte d'entrée/sortie vers Internet
+
 - **Route Table** : Table de routage configurée pour diriger le trafic Internet (0.0.0.0/0) via l'IGW
 
 ### 🔒 Couche Sécurité
@@ -34,7 +36,7 @@ Cette infrastructure déploie une architecture web 3-tiers complète :
   - **IP publique** : Automatiquement assignée pour l'accès web
 
 ---
-Quand j’ai commencé ce projet, je ne savais même pas ce que signifiaient "user data" ou "Nginx". Ces termes me semblaient techniques, abstraits, presque réservés aux experts. Mais en réalité, leur configuration est bien plus simple qu’il n’y paraît.
+Quand j’ai commencé ce projet, je ne savais même pas ce que signifiaient "user data" ou "Nginx". Ces termes me semblaient techniques, abstraits. Mais en réalité, leur configuration est bien plus simple qu’il n’y paraît et sa fait gagner du temps
 
 Ci-dessous, vous trouverez une explication de ce système
 
@@ -50,7 +52,7 @@ Ci-dessous, vous trouverez une explication de ce système
 3. Crée une page HTML personnalisée
 4. Démarre le serveur web
 
-**Résultat :** En lançant simplement `terraform apply`, vous obtenez un serveur web **complètement opérationnel** en 2-3 minutes, sans aucune intervention manuelle !
+**Résultat :** En lançant simplement `terraform apply`, vous obtenez un serveur web complètement opérationnel en 2-3 minutes, sans aucune intervention manuelle ! Et hop un site tout fait ! 
 
 ### Pourquoi Nginx ?
 
