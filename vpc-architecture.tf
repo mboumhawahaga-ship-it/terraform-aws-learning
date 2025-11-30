@@ -11,6 +11,81 @@ resource "aws_subnet" "public" {
     cidr_block = "10.0.1.0/24"
     availability_zone = "eu-west-3a"
 
+# Second subnet privé pour RDS (dans une autre zone de disponibilité)
+resource "aws_subnet" "private2" {
+  vpc_id            = aws_vpc.mon_vpc.id
+  cidr_block        = "10.0.3.0/24"
+  availability_zone = "eu-west-3c"
+  tags = {
+    Name = "Subnet-Private-2"
+  }
+}
+
+# Groupe de subnets RDS (nécessaire pour créer RDS dans un VPC)
+resource "aws_db_subnet_group" "rds_subnets" {
+  name       = "rds-subnet-group"
+  subnet_ids = [aws_subnet.private.id, aws_subnet.private2.id]
+
+  tags = {
+    Name = "RDS Subnet Group"
+  }
+}
+
+# Security Group pour RDS
+resource "aws_security_group" "rds_sg" {
+  name        = "rds-sg"
+  description = "Security group for RDS"
+  vpc_id      = aws_vpc.mon_vpc.id
+
+  # Autorise les connexions depuis l'application (exemple sur le port 3306 pour MySQL)
+  ingress {
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.security_group.id] # Security group app/web
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "RDS Security Group"
+  }
+}
+
+# Instance RDS
+resource "aws_db_instance" "mydb" {
+  identifier              = "mydb-instance"
+  allocated_storage       = 20
+  storage_type            = "gp3"
+  engine                  = "mysql"
+  engine_version          = "8.0"
+  instance_class          = "db.t3.micro"
+  name                    = "mydb"
+  username                = "admin"
+  password                = "example-password" # Utiliser une variable ou AWS Secrets Manager pour plus de sécurité
+  db_subnet_group_name    = aws_db_subnet_group.rds_subnets.name
+  vpc_security_group_ids  = [aws_security_group.rds_sg.id]
+  publicly_accessible     = false
+  multi_az                = false
+  backup_retention_period = 7
+  skip_final_snapshot     = false
+
+  tags = {
+    Name = "My RDS Instance"
+  }
+}
+
+# Output de l'endpoint RDS
+output "rds_endpoint" {
+  value       = aws_db_instance.mydb.endpoint
+  description = "Endpoint privé de l'instance RDS"
+}
+
     tags = {
         Name = "Subnet-Public"
     }
