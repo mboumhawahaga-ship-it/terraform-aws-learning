@@ -1,68 +1,141 @@
-# Terraform AWS Learning
+# Projet pédagogique — Terraform : VPC + EC2 (Nginx) + RDS MySQL (IAM DB Auth)
 
-Premier projet d'apprentissage Terraform pour la préparation à la certification **AWS Solutions Architect Associate**.
+Objectif 
+------------------------
+Déployer, de manière simple et répétable avec Terraform, une petite infrastructure AWS :
+- une machine publique (EC2) qui héberge Nginx,
+- une base de données MySQL privée (RDS) dans un subnet privé,
+- des règles de sécurité (Security Groups) qui contrôlent l’accès,
+- utilisation d’Authentication IAM pour se connecter à la base (IAM DB Auth).
 
-Infrastructure AWS complète créée avec Infrastructure as Code (IaC).
+Pourquoi ce projet ?
+--------------------
+- Comprendre les notions de réseau AWS (VPC / subnet public vs privé).  
+- Voir comment séparer une application web publique (EC2) d’une base de données privée (RDS).  
+- Découvrir une méthode plus sûre d’authentification à la base : IAM DB Auth (tokens IAM) au lieu d’un mot de passe permanent.
 
-> **Note :** Ce projet démontre l'automatisation complète du déploiement d'une infrastructure web sur AWS, du réseau jusqu'au serveur web opérationnel.
+Architecture simplifiée
+-----------------------
+- VPC
+  - Subnet public  -> EC2 (Nginx) — IP publique
+  - Subnet privé   -> RDS MySQL — non public
 
----
+Diagramme ASCII :
+```
+Internet
+   |
+ [IGW]
+   |
+Public subnet (EC2 - Nginx) ---> sg app_sg (SSH/HTTP)
+   |
+Private subnet (RDS MySQL) ---> sg rds_sg (MySQL uniquement depuis app_sg)
+```
 
-## 📋 Architecture
+Fichiers principaux
+-------------------
+- `vpc-architecture.tf` — code principal : VPC, subnets, EC2, RDS, IAM, SGs.  
+- `variables.tf` — variables modifiables (région, AMI, CIDR…).  
+- `outputs.tf` — outputs pratiques (IP EC2, endpoint RDS, etc.).  
 
-Cette infrastructure déploie une architecture web 3-tiers complète :
+Prérequis (avant d’exécuter)
+----------------------------
+- Compte AWS avec permissions pour créer ressources (VPC, EC2, RDS, IAM...).  
+- AWS CLI configuré localement ou variables d’environnement pour Terraform.  
+- Terraform >= 1.0.  
+- Vérifier/mettre une AMI valide dans `variables.tf` si nécessaire (AMI dépend de la région).
 
-### 🌐 Couche Réseau
-- **VPC** : Réseau virtuel privé isolé (10.0.0.0/16)
-- **Subnets** :
-  - **Subnet Public** (10.0.1.0/24) dans eu-west-3a - pour les ressources accessibles depuis Internet
-  - **Subnet Privé** (10.0.2.0/24) dans eu-west-3b - pour les ressources internes (bases de données, etc.)
+Pourquoi j’ai utilisé des variables ?
+------------------------------------
+Les variables permettent de :
+- changer facilement la région, l’AMI ou les CIDR sans toucher au code,
+- réutiliser la même configuration pour plusieurs environnements (dev, test, prod),
+- rendre le projet compréhensible et configurable par d’autres.
 
-- **Internet Gateway** : Porte d'entrée/sortie vers Internet
+Déploiement pas à pas (rapide)
+------------------------------
+1) Initialiser Terraform :
+```bash
+terraform init
+```
 
-- **Route Table** : Table de routage configurée pour diriger le trafic Internet (0.0.0.0/0) via l'IGW
+2) Prévisualiser :
+```bash
+terraform plan -out=tfplan
+```
 
-### 🔒 Couche Sécurité
-- **Security Group** (Firewall virtuel) :
-  - Port 22 (SSH) : pour l'administration du serveur
-  - Port 80 (HTTP) : pour l'accès web
-  - Règle sortante : tout le trafic autorisé
+3) Appliquer :
+```bash
+terraform apply "tfplan"
+```
 
-### 💻 Couche Application
-- **Instance EC2** : 
-  - **Type** : t2.micro 
-  - **OS** : Ubuntu Server
-  - **Serveur web Nginx** : Installé et configuré **automatiquement** via un script user_data
-  - **IP publique** : Automatiquement assignée pour l'accès web
+Après `apply` tu auras des outputs : IP publique de l’EC2 et endpoint du RDS.
 
----
-Quand j’ai commencé ce projet, je ne savais même pas ce que signifiaient "user data" ou "Nginx". Ces termes me semblaient techniques, abstraits. Mais en réalité, leur configuration est bien plus simple qu’il n’y paraît et sa fait gagner du temps
+Comprendre IAM DB Auth 
+-------------------------------------------
+- Au lieu d’un mot de passe statique, RDS peut accepter des "tokens" IAM.  
+- L’EC2 possède un rôle IAM (instance profile) qui contient la permission `rds-db:connect`.  
+- L’EC2 génère un token temporaire (via AWS CLI ou SDK) et l’utilise comme mot de passe pour MySQL.  
+- Ce token expire rapidement → réduit le risque si quelqu’un l’intercepte.
 
-Ci-dessous, vous trouverez une explication de ce système
+Étapes pratiques pour IAM DB Auth (ce qu’il faut faire après le deploy)
+--------------------------------------------------------------------
+1) Le déploiement crée la base et un mot de passe "bootstrap" (généré par Terraform). Ce mot de passe sert pour la première connexion d’admin.  
+2) Se connecter une première fois en admin pour créer un utilisateur MySQL pour IAM (exemples) :
+```sql
+-- se connecter avec admin (mot de passe bootstrap)
+CREATE USER 'app_iam_user'@'%' IDENTIFIED WITH AWSAuthenticationPlugin as 'RDS';
+GRANT ALL PRIVILEGES ON mydb.* TO 'app_iam_user'@'%';
+FLUSH PRIVILEGES;
+```
+3) Dans IAM, la policy attachée à l’instance EC2 contient une Resource ARN de ce format :
+```
+arn:aws:rds-db:<region>:<account-id>:dbuser:<db-resource-id>/<db-username>
+```
+Assure-toi que `<db-username>` correspond au nom MySQL créé (`app_iam_user` ci‑dessus).
 
-## 🤖 
+4) Exemple pour générer un token depuis l’EC2 et se connecter (exécuter sur l’EC2) :
+```bash
+# Générer token (AWS CLI)
+TOKEN=$(aws rds generate-db-auth-token --hostname <RDS_ENDPOINT> --port 3306 --region <REGION> --username app_iam_user)
 
-### Qu'est-ce que user_data ?
+# Se connecter via mysql-client (plugin cleartext nécessaire)
+mysql --host=<RDS_ENDPOINT> --port=3306 --enable-cleartext-plugin -u app_iam_user -p"$TOKEN" mydb
+```
 
-**user_data** est un script qui s'exécute automatiquement au premier démarrage de l'instance EC2. C'est comme donner une "liste de tâches" donner à votre serveur.
+Note pédagogique : pourquoi garder un mot de passe bootstrap ?
+- RDS demande un "master password" à la création. On l’utilise uniquement pour créer l’utilisateur IAM dans MySQL.  
+- Ensuite l’application utilise IAM tokens. Tu peux conserver le mot de passe pour administration manuelle.
 
-**Dans ce projet, le script user_data :**
-1. Met à jour les packages système
-2. Installe automatiquement Nginx (serveur web)
-3. Crée une page HTML personnalisée
-4. Démarre le serveur web
+Sécurité et bonnes pratiques 
+------------------------------------
+- Restreins SSH à ton IP (au lieu de 0.0.0.0/0) ou utilise SSM Session Manager.  
+- Ne laisse pas les secrets en clair dans le repo. Terraform stocke les secrets générés dans l’état : protège ton état (S3 + KMS, ou Terraform Cloud).  
+- Garde RDS `publicly_accessible = false` (déjà configuré).  
+- Préfère IAM Auth pour les connexions applicatives : tokens courts, moins d’exposition.
 
-**Résultat :** En lançant simplement `terraform apply`, vous obtenez un serveur web complètement opérationnel en 2-3 minutes, sans aucune intervention manuelle ! Et hop un site tout fait ! 
+Dépannage fréquent (conseils rapides)
+------------------------------------
+- EC2 ne peut pas joindre RDS ? Vérifie les Security Groups (app_sg doit être source autorisée sur rds_sg).  
+- Erreur `rds-db:connect` refusée ? Vérifie que la policy IAM référence bien la resource ARN correcte (compte, db resource id, username).  
+- Impossible de se connecter avec token ? Assure-toi que `aws rds generate-db-auth-token` est appelé depuis une instance ayant le bon rôle IAM (instance profile).
 
-### Pourquoi Nginx ?
+Nettoyage
+---------
+Pour tout supprimer :
+```bash
+terraform destroy
+```
 
-**Nginx** est un serveur web populaire qui transforme votre serveur EC2 en site web accessible.
+Glossaire 
+------------------------
+- VPC : réseau privé dans AWS.  
+- Subnet public : réseau où les instances peuvent avoir une IP publique et être accessibles depuis Internet.  
+- Subnet privé : réseau sans IP publique — parfait pour les bases de données.  
+- Security Group : pare-feu virtuel attaché aux instances.  
+- IAM : gestion des permissions.  
+- Instance profile : rôle IAM attaché à une instance EC2.  
+- Token IAM (pour RDS) : mot de passe temporaire généré par AWS pour se connecter à la base.
 
-Une des raisons pour lesquelles j’ai choisi Nginx, c’est que je n’avais pas envie de me trop compliqué la création de mon infra, avec la récupération des clés SSH de l’instance EC2, ni de devoir uploader un site statique dans un bucket S3, configurer les permissions, le hosting, etc.
-
-Avec Nginx, j’ai pu déployer mon site directement sur l’instance EC2 via Terraform, en utilisant les user data. Pas besoin de me connecter manuellement à l’instance, ni de gérer des clés : tout se fait automatiquement au démarrage.
-
-C’est simple, rapide...
 
 
 
